@@ -13,14 +13,13 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
-import android.provider.MediaStore;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -28,8 +27,8 @@ import android.widget.Toast;
 import com.aiseminar.EasyPR.PlateRecognizer;
 import com.aiseminar.platerecognizer.R;
 import com.aiseminar.platerecognizer.base.BaseActivity;
+import com.aiseminar.util.CameraUtil;
 import com.aiseminar.util.BitmapUtil;
-import com.aiseminar.util.DateUtil;
 import com.aiseminar.util.FileUtil;
 
 import java.io.ByteArrayOutputStream;
@@ -37,7 +36,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Date;
+import java.util.List;
 
 import butterknife.Bind;
 import butterknife.ButterKnife;
@@ -212,7 +211,7 @@ public class CameraActivity extends BaseActivity implements SurfaceHolder.Callba
                             // 打开当前选中的摄像头
                             mCamera = Camera.open(i);
                             // 通过surfaceview显示取景画面
-                            setStartPreview(mCamera,mSvHolder);
+                            setStartPreview(mCamera, mSvHolder);
                             cameraPosition = 0;
                             break;
                         }
@@ -224,7 +223,7 @@ public class CameraActivity extends BaseActivity implements SurfaceHolder.Callba
                              */
                             releaseCamera();
                             mCamera = Camera.open(i);
-                            setStartPreview(mCamera,mSvHolder);
+                            setStartPreview(mCamera, mSvHolder);
                             cameraPosition = 1;
                             break;
                         }
@@ -348,7 +347,9 @@ public class CameraActivity extends BaseActivity implements SurfaceHolder.Callba
         }
     };
 
-    /** Check if this device has a camera */
+    /**
+     * Check if this device has a camera
+     */
     private boolean checkCameraHardware(Context context) {
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA)) {
             // this device has a camera
@@ -361,6 +362,7 @@ public class CameraActivity extends BaseActivity implements SurfaceHolder.Callba
 
     /**
      * activity返回式返回拍照图片路径
+     *
      * @param mediaFile
      */
     private void returnResult(File mediaFile) {
@@ -372,10 +374,12 @@ public class CameraActivity extends BaseActivity implements SurfaceHolder.Callba
 
     /**
      * 设置camera显示取景画面,并预览
+     *
      * @param camera
      */
-    private void setStartPreview(Camera camera,SurfaceHolder holder){
+    private void setStartPreview(Camera camera, SurfaceHolder holder) {
         try {
+            setupCamera(camera);
             camera.setPreviewDisplay(holder);
             camera.startPreview();
         } catch (IOException e) {
@@ -384,11 +388,11 @@ public class CameraActivity extends BaseActivity implements SurfaceHolder.Callba
     }
 
     /**
-     *   播放系统拍照声音
+     * 播放系统拍照声音
      */
     private void shootSound() {
         AudioManager meng = (AudioManager) this.getSystemService(Context.AUDIO_SERVICE);
-        int volume = meng.getStreamVolume( AudioManager.STREAM_NOTIFICATION);
+        int volume = meng.getStreamVolume(AudioManager.STREAM_NOTIFICATION);
 
         if (volume != 0) {
             if (mShootMP == null)
@@ -411,7 +415,7 @@ public class CameraActivity extends BaseActivity implements SurfaceHolder.Callba
             final YuvImage image = new YuvImage(data, ImageFormat.NV21, w, h, null);
             // 转Bitmap
             ByteArrayOutputStream os = new ByteArrayOutputStream(data.length);
-            if(! image.compressToJpeg(new Rect(0, 0, w, h), 100, os)) {
+            if (!image.compressToJpeg(new Rect(0, 0, w, h), 100, os)) {
                 return;
             }
             byte[] tmp = os.toByteArray();
@@ -430,8 +434,8 @@ public class CameraActivity extends BaseActivity implements SurfaceHolder.Callba
         int height = metric.heightPixels;  // 屏幕高度（像素）
         Bitmap sizeBitmap = Bitmap.createScaledBitmap(originalBitmap, width, height, true);
 
-        int rectWidth = (int)(mIvPlateRect.getWidth() * 1.5);
-        int rectHight = (int)(mIvPlateRect.getHeight() * 1.5);
+        int rectWidth = (int) (mIvPlateRect.getWidth() * 1.5);
+        int rectHight = (int) (mIvPlateRect.getHeight() * 1.5);
         int[] location = new int[2];
         mIvPlateRect.getLocationOnScreen(location);
         location[0] -= mIvPlateRect.getWidth() * 0.5 / 2;
@@ -455,7 +459,7 @@ public class CameraActivity extends BaseActivity implements SurfaceHolder.Callba
 
             // 进行车牌识别
             String plate = mPlateRecognizer.recognize(pictureFile.getAbsolutePath());
-            if (null != plate && ! plate.equalsIgnoreCase("0")) {
+            if (null != plate && !plate.equalsIgnoreCase("0")) {
                 mTvPlateResult.setText(plate);
             } else {
                 mTvPlateResult.setText("请调整角度");
@@ -467,5 +471,50 @@ public class CameraActivity extends BaseActivity implements SurfaceHolder.Callba
             Log.d(TAG, "Error accessing file: " + e.getMessage());
         }
     }
+
+    /**
+     * 设置
+     */
+    private void setupCamera(Camera camera) {
+        try {
+//            DisplayMetrics dm = getResources().getDisplayMetrics();
+//            int screenWidth = dm.widthPixels;
+//            int screenHeight = dm.heightPixels;
+
+            Camera.Parameters parameters = camera.getParameters();
+
+            List<String> focusModes = parameters.getSupportedFocusModes();
+            if (focusModes.contains(Camera.Parameters.FOCUS_MODE_AUTO)) {
+                // Autofocus mode is supported 自动对焦
+                parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+            }
+
+//            //这里第三个参数为最小尺寸 getPropPreviewSize方法会对从最小尺寸开始升序排列 取出所有支持尺寸的最小尺寸
+//            Camera.Size previewSize = CameraUtil.getInstance().getPropPreviewSize(parameters.getSupportedPreviewSizes(), 1000);
+//            parameters.setPreviewSize(previewSize.width, previewSize.height);
+//
+//            Camera.Size pictrueSize = CameraUtil.getInstance().getPropPictureSize(parameters.getSupportedPictureSizes(), 1000);
+//            parameters.setPictureSize(pictrueSize.width, pictrueSize.height);
+//
+            camera.setParameters(parameters);
+//
+//            Log.d("previewSize.width===", previewSize.width + "");
+//            Log.d("previewSize.height===", previewSize.height + "");
+//
+//            /**
+//             * 设置surfaceView的尺寸 因为camera默认是横屏，所以取得支持尺寸也都是横屏的尺寸
+//             * 我们在startPreview方法里面把它矫正了过来，但是这里我们设置设置surfaceView的尺寸的时候要注意 previewSize.height<previewSize.width
+//             * previewSize.width才是surfaceView的高度
+//             * 一般相机都是屏幕的宽度 这里设置为屏幕宽度 高度自适应 你也可以设置自己想要的大小
+//             */
+//            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(screenWidth, screenWidth * previewSize.width / previewSize.height);
+//            //这里当然可以设置拍照位置 比如居中 我这里就置顶了
+//            //params.gravity = Gravity.CENTER;
+//            mSvCamera.setLayoutParams(params);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 
 }
